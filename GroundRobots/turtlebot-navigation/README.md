@@ -62,7 +62,7 @@ Marvelmind Beacons (4-6 stationary)
 | Decision | Reasoning |
 |---|---|
 | No LiDAR / SLAM | Marvelmind provides absolute position directly; the operating area is a known open space |
-| Single hedgehog, not two | Two-hedgehog heading is noisy at low speed and caused control oscillation; a dedicated IMU is more reliable |
+| Single hedgehog, not two *(under re-evaluation, see §10)* | Originally: two-hedgehog heading was noisy at low speed and caused control oscillation, so a dedicated IMU was used instead. 2026-09-24: root-caused the noise to hedgehog spacing (10 in, below Marvelmind's 0.5 m recommended spacing) rather than the paired-beacon approach itself. Re-testing with wider spacing before deciding whether this replaces the IMU. |
 | MicroStrain over Kobuki IMU | Kobuki IMU drifts badly (observed ~178 deg persistent offset); MicroStrain drifts ~0.002 deg/s |
 | Gyro integration over onboard filter | The complementary filter needs ~10 s to converge after a turn — far too slow for a 20 Hz Nav2 controller |
 | Regulated Pure Pursuit | Simple, well-suited to differential drive without obstacle sensors |
@@ -118,7 +118,7 @@ If the Pi 5 PSU is not the official 27 W (5 V / 5 A) supply, the Pi caps total U
 current at 600 mA across all ports. With four devices attached this causes random
 dropouts. Use a **powered** hub.
 
-### Recommended: udev Rules
+### udev Rules — Implemented (2026-09-24)
 
 With three serial devices, `/dev/ttyUSB*` and `/dev/ttyACM*` assignments can swap
 between boots. Identify each device:
@@ -127,12 +127,43 @@ between boots. Identify each device:
 udevadm info -a -n /dev/ttyACM0 | grep -E "serial|idVendor|idProduct"
 ```
 
-Then create `/etc/udev/rules.d/99-robot.rules` with stable symlinks
-(`/dev/imu`, `/dev/kobuki`, `/dev/hedgehog`) keyed on serial number, and point
-launch files at those names.
+`/etc/udev/rules.d/99-robot.rules` (keyed on serial number, `MODE="0666"` so no
+sudo/group membership is required to open them):
 
-> **Status: not yet implemented.** This is the single highest-value reliability
-> improvement remaining.
+```
+KERNEL=="ttyACM*", ATTRS{idVendor}=="0483", ATTRS{idProduct}=="5740", ATTRS{serial}=="0000__6250.88495", MODE="0666", SYMLINK+="imu"
+KERNEL=="ttyACM*", ATTRS{idVendor}=="0483", ATTRS{idProduct}=="5740", ATTRS{serial}=="207A37734E30", MODE="0666", SYMLINK+="hedgehog"
+KERNEL=="ttyUSB*", ATTRS{idVendor}=="0403", ATTRS{idProduct}=="6001", MODE="0666", SYMLINK+="kobuki"
+```
+
+```bash
+sudo udevadm control --reload-rules
+sudo udevadm trigger
+ls -l /dev/imu /dev/kobuki /dev/hedgehog   # confirm all three resolve
+```
+
+Launch commands should reference `/dev/imu`, `/dev/kobuki`, `/dev/hedgehog`
+directly instead of raw `/dev/ttyACM0`/`/dev/ttyUSB0` numbers (see [Startup
+Sequence](#17-startup-sequence)).
+
+> **Status: implemented.** Previously the single highest-value reliability
+> improvement remaining — now done.
+
+### USB Bus Stability Under Load
+
+Observed 2026-09-24: the Kobuki dropped off USB mid-session while sharing a bus
+with the Marvelmind modem (`dmesg`: `usb 4-1: clear tt 2 (9031) error -71` followed
+by a disconnect and re-enumeration under a new device number). The node holding
+the old serial handle silently stops working even though `/dev/ttyUSB0` reappears —
+symptoms look identical to "commands publishing, robot not moving." A relaunch
+after re-enumeration fixes it immediately.
+
+Root cause suspected but not confirmed: bus/hub power budget with two USB serial
+devices (Kobuki + Marvelmind modem) active simultaneously, worse now that a second
+hedgehog draws through the same modem path. If this recurs, move the Kobuki to a
+Pi root USB port rather than through the TurtleBot's internal hub (same fix that
+resolved the Kinect power issue in Phase 6), and confirm with `lsusb -t` whether
+Kobuki and the modem currently share a hub.
 
 ---
 
@@ -565,10 +596,20 @@ Check with `ros2 pkg executables marvelmind_ros2`.
 
 ```bash
 ros2 run marvelmind_ros2 marvelmind_ros2 --ros-args \
-  -p port:=/dev/ttyACM0 \
+  -p marvelmind_tty_filename:=/dev/hedgehog \
   -p marvelmind_tty_baudrate:=115200 \
   -p marvelmind_publish_rate_in_hz:=8
 ```
+
+> **Gotcha confirmed 2026-09-24:** the serial-device parameter is
+> `marvelmind_tty_filename`, not `port`. Passing `-p port:=...` is silently
+> accepted and ignored — the driver falls back to its hardcoded default
+> (`/dev/ttyACM0`) with no error, which can point it at the wrong physical
+> device with no indication anything is wrong. Confirm the real parameter
+> names for your build with:
+> ```bash
+> ros2 param list /marvelmind_ros2
+> ```
 
 ### The 1 Hz Trap
 
@@ -605,6 +646,76 @@ y_m: -2.095
 z_m: 0.382
 flags: 2
 ```
+
+### Paired Beacons Mode — Native Heading (2026-09-24)
+
+With two hedgehogs paired, `/hedgehog_pos_ang` adds an `angle` field carrying
+heading derived directly from the pair — no IMU needed, in principle. Only the
+lead hedgehog needs a USB connection to the modem; the second talks over the
+existing radio mesh.
+
+Sample message:
+
+```yaml
+address: 7
+timestamp_ms: 1790275470157
+x_m: 2.523
+y_m: -0.362
+z_m: -1.0
+flags: 3
+angle: 334.29998779296875
+```
+
+**Units and sign — confirmed by physical test:** `angle` is in degrees, 0-360.
+A manual 90° **clockwise** rotation of the robot (viewed from above) *decreased*
+the reported angle by ~84°. This is standard math/CCW-positive convention,
+matching ROS REP103 yaw sign — no inversion needed, just a linear offset and
+degrees→radians conversion:
+
+```python
+import math
+
+ZERO_OFFSET_DEG = None  # capture per-mount, see calibration procedure below
+
+def hedgehog_angle_to_yaw(angle_deg: float) -> float:
+    """Convert /hedgehog_pos_ang 'angle' to standard ROS yaw (radians, REP103)."""
+    corrected = angle_deg - ZERO_OFFSET_DEG
+    yaw_rad = math.radians(corrected)
+    return (yaw_rad + math.pi) % (2 * math.pi) - math.pi  # wrap to [-pi, pi]
+
+def yaw_to_quaternion_z_w(yaw_rad: float):
+    return math.sin(yaw_rad / 2.0), math.cos(yaw_rad / 2.0)  # x=y=0, planar robot
+```
+
+**Zero-offset calibration (must be redone any time hedgehog mounting changes):**
+
+1. Point the bumper at whatever physical direction you're defining as "forward."
+2. `ros2 topic echo /hedgehog_pos_ang --once` — that `angle` value is
+   `ZERO_OFFSET_DEG`.
+
+**Hedgehog spacing is the dominant accuracy factor.** Marvelmind's spec: >20 cm
+hard minimum, **0.5 m recommended** for a stable paired-heading solve. At 10 in
+(~25 cm) — above the minimum but well under recommended — `angle` wandered
+~30° at rest (confirmed not caused by "High rate extrapolation," which requires
+a license and was never enabled). Mechanism: each hedgehog's ±2 cm differential
+precision gets divided by the physical baseline to produce the angle error, so
+a short baseline amplifies ordinary position noise into large heading noise.
+**Action: mount the two hedgehogs ~0.5 m apart** (front/back of chassis, not
+close together), then re-run the stationary drift check — target is the ~1°
+band seen after fixing `z_m` (height was also initially misconfigured, causing
+`z_m` to read as low as -1.0 m; corrected to a stable ~0.66 m).
+
+Also note: `/hedgehog_quality` is advertised (`ros2 topic list`) but never
+actually publishes on this driver/config — not investigated further since it
+wasn't blocking, but don't rely on it for fix-quality gating without confirming
+it's populated first.
+
+> **Status: heading sign and zero-offset procedure validated. Spacing fix
+> (10 in → 0.5 m) in progress — stationary drift re-check and offset
+> recapture still needed before this can replace the MicroStrain IMU in the
+> fusion node (§11).** If it holds up, this removes Terminals 3 and 4 (IMU +
+> fusion node) from the startup sequence entirely, since `/hedgehog_pos_ang`
+> alone would provide x, y, and yaw.
 
 ---
 
@@ -1223,10 +1334,13 @@ ros2 topic echo /imu/data --field orientation.z
 ### Full Autonomous Stack
 
 ```bash
+# T0 - confirm udev symlinks resolve before touching anything else
+ls -l /dev/imu /dev/kobuki /dev/hedgehog
+
 # T1 - Marvelmind
 source ~/kobuki_ws/install/setup.bash
 ros2 run marvelmind_ros2 marvelmind_ros2 --ros-args \
-  -p port:=/dev/ttyACM0 -p marvelmind_tty_baudrate:=115200 \
+  -p marvelmind_tty_filename:=/dev/hedgehog -p marvelmind_tty_baudrate:=115200 \
   -p marvelmind_publish_rate_in_hz:=8
 
 # T2 - Kobuki (custom launch)
@@ -1251,8 +1365,13 @@ source /opt/ros/jazzy/setup.bash
 ros2 run topic_tools relay /cmd_vel /commands/velocity
 ```
 
-> With both the hedgehog and the IMU on `ttyACM*`, device node assignment is not
-> guaranteed across reboots. Verify before launching, or implement the udev rules.
+> **udev rules now implemented (see §3)** — launch commands reference
+> `/dev/imu`, `/dev/kobuki`, `/dev/hedgehog` symlinks instead of raw device
+> numbers, so this is no longer a per-boot manual check. T0 above is a cheap
+> sanity check, not a workaround.
+>
+> If paired-beacon heading (§10) replaces the IMU/fusion combo after the
+> spacing fix is validated, T3 and T4 drop out of this sequence entirely.
 
 ---
 
@@ -1272,6 +1391,32 @@ zeroes velocity after 0.6 s of silence.
 
 Serial noise. Occasional occurrences are normal. Frequent ones improve on a black
 USB 2.0 port rather than a hub.
+
+**If commands stop landing entirely (no motion, not just log noise):** check
+`sudo dmesg | tail -30` for a `USB disconnect` / `error -71` around the same
+time — the device may have dropped and re-enumerated under a new number while
+the running node still holds the old (dead) serial handle. Relaunch the node;
+it will bind to the live device. See [USB Bus Stability Under Load](#3-usb-port-assignment)
+if this recurs.
+
+### `marvelmind_ros2` reports the wrong `tty:` in its startup log despite `-p port:=...`
+
+`port` is not a real parameter on this build — it's silently ignored, and the
+driver falls back to a hardcoded default device. Confirm real parameter names
+with `ros2 param list /marvelmind_ros2` and use `marvelmind_tty_filename`
+instead. This can silently point the driver at a *different physical device*
+(e.g. the IMU instead of the hedgehog, if both are `0483:5740`) with no error —
+if a hedgehog topic is frozen, check the driver's own startup log line for
+which `tty` it actually opened before debugging anything downstream.
+
+### `/hedgehog_pos_ang` angle wanders significantly (10-30°+) with the robot stationary
+
+Check hedgehog spacing before anything else if running paired beacons. Marvelmind
+minimum is >20 cm but **recommended is 0.5 m** for a stable heading solve — position
+noise in each hedgehog (±2 cm differential precision) gets divided by the physical
+baseline, so a short spacing amplifies into large angle noise. 10 in (~25 cm)
+produced ~30° drift at rest; not caused by "High rate extrapolation" (license-gated
+feature, confirmed disabled). Widen the spacing toward 0.5 m and re-test.
 
 ### apt 404 errors on every ROS package
 
@@ -1356,8 +1501,10 @@ screen -S build
 | MicroStrain EKF (0x82) unusable indoors | By design — no GNSS; CF/gyro used instead |
 | Fusion node still reads yaw from `/kobuki_odom` | Needs rewrite to `/imu/data` |
 | Kinect MJPEG stream times out | Deprioritized |
-| udev rules not written | Device nodes can swap between boots |
+| ~~udev rules not written~~ | **Done 2026-09-24** — see §3, `/etc/udev/rules.d/99-robot.rules` |
 | Robot has left map bounds during navigation | Mitigated by a larger map; not fully solved |
+| Paired-beacon hedgehog spacing (10 in) causes ~30° heading drift at rest | **In progress 2026-09-24** — remount to Marvelmind's recommended 0.5 m spacing, then re-validate drift and recapture zero-offset (§10) |
+| Kobuki dropped off USB mid-session sharing a bus with the Marvelmind modem (`error -71`) | Not yet root-caused — recurs intermittently; workaround is relaunching after re-enumeration. Suspect bus/hub power budget, worse with two hedgehogs active |
 
 ### Open Question
 
@@ -1398,6 +1545,22 @@ few degrees at most.
    to magnetic interference and free of the CF's settling lag.
 
 7. **Package `microstrain_yaw_node.py`** as a proper ROS 2 package with a launch file.
+
+8. **Remount paired hedgehogs to ~0.5 m spacing** (currently 10 in / ~25 cm) and
+   re-run the stationary drift check on `/hedgehog_pos_ang` — target ~1° band.
+
+9. **Recapture `ZERO_OFFSET_DEG`** at the new mount position and re-run the 90°
+   rotation confirmation test (§10) before trusting the angle for control.
+
+10. **If spacing fixes the drift:** write the `/hedgehog_pos_ang` → yaw node
+    (code in §10) and swap it in for Terminals 3-4 (MicroStrain + fusion node)
+    in the startup sequence — paired beacons would then supply x, y, and yaw
+    from a single topic.
+
+11. **Investigate the intermittent Kobuki USB disconnect** (`error -71`) under
+    load with the Marvelmind modem on the same bus — check `lsusb -t` for
+    shared-hub topology and consider moving Kobuki to a Pi root port if it
+    recurs.
 
 ---
 

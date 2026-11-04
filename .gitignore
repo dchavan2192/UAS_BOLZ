@@ -3,3 +3,8 @@ __pycache__/
 .venv/
 mavenv/
 *.log
+
+# ROS 2 / colcon build output
+build/
+install/
+log/

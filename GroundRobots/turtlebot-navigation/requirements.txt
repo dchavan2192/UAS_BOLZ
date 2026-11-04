@@ -1,0 +1,2 @@
+# ROS 2 Jazzy packages are installed via apt (see README.md).
+pyserial

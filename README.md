@@ -5,6 +5,22 @@
 | [CrowDrone](./CrowDrone/) | Aerial platform — [Marvelmind/Pixhawk integration](./CrowDrone/DRONE_INTEGRATION.md) |
 | [GroundRobots](./GroundRobots/turtlebot-navigation/) | TurtleBot2 indoor autonomous navigation |
 
+## Repository layout
+
+```
+CrowDrone/                      # drone code (pymavlink → Pixhawk)
+  drone.py, config.py, main.py
+  test_connection.py, test_arming.py   # run from inside CrowDrone/
+  requirements.txt
+GroundRobots/turtlebot-navigation/
+  scripts/                      # ROS 2 nodes and run-time tools
+  diagnostics/                  # one-off sensor/serial debugging scripts
+  requirements.txt              # pip deps; ROS deps come from apt
+MARVELMIND.md, Pi_Hotspot_SSH_Guide.md   # shared docs
+```
+
+Install Python deps for a platform with `pip install -r <platform>/requirements.txt`.
+
 ## Shared
 
 - **[Marvelmind Guide](./MARVELMIND.md)** — indoor positioning, used by both platforms. **Read before switching the hedgehog between projects.**

@@ -14,7 +14,7 @@ import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import Imu
 
-PORT       = '/dev/ttyACM0'
+PORT       = '/dev/imu'
 BAUD       = 115200
 CAL_SECS   = 10.0     # stationary calibration window
 STILL_RATE = 0.01     # rad/s below which we consider the robot stationary
@@ -38,7 +38,7 @@ class MicrostrainYaw(Node):
     def __init__(self):
         super().__init__('microstrain_yaw')
         self.pub = self.create_publisher(Imu, '/imu/data', 10)
-        self.ser = serial.Serial(PORT, BAUD, timeout=0.1)
+        self.ser = serial.Serial(PORT, BAUD, timeout=1.0)
         self.buf = b''
 
         self.bias = 0.0
@@ -55,7 +55,13 @@ class MicrostrainYaw(Node):
         self.create_timer(0.005, self.spin_serial)
 
     def spin_serial(self):
-        self.buf += self.ser.read(512)
+        try:
+            n = self.ser.in_waiting
+            if n > 0:
+                self.buf += self.ser.read(n)
+        except (serial.SerialException, OSError):
+            pass
+
         while True:
             i = self.buf.find(b'\x75\x65')
             if i < 0 or len(self.buf) < i + 4:
@@ -111,7 +117,7 @@ class MicrostrainYaw(Node):
             return
 
         rate = self.gz - self.bias
-        self.yaw += rate * dt
+        self.yaw -= rate * dt
 
         # drift correction, only while genuinely still
         if abs(rate) < STILL_RATE:

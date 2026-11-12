@@ -13,8 +13,11 @@ CrowDrone/                      # drone code (pymavlink → Pixhawk)
   test_connection.py, test_arming.py   # run from inside CrowDrone/
   requirements.txt
 GroundRobots/turtlebot-navigation/
-  scripts/                      # ROS 2 nodes and run-time tools
+  marvelmind_fusion/            # deployed ROS 2 package: fusion, goto_goal, perimeter, calibration
+  scripts/                      # standalone tools + earlier/alternate node versions
   diagnostics/                  # one-off sensor/serial debugging scripts
+  nav2_config/  config/         # Nav2 launch/params/map; IMU params, yaw calibration
+  kobuki_launch.py              # custom Kobuki launch
   requirements.txt              # pip deps; ROS deps come from apt
 MARVELMIND.md, Pi_Hotspot_SSH_Guide.md   # shared docs
 ```

@@ -6,6 +6,20 @@ A ground robot platform for GPS-denied indoor autonomous navigation. Position co
 Marvelmind ultrasonic trilateration, heading from a MicroStrain inertial sensor, and path
 planning from Nav2 — no LiDAR, no SLAM.
 
+> **Last synced from the robot Pi (`bolzpi2`): 2026-11-12.** See [§16](#16-file-inventory)
+> for where each file lives in this repo and on the Pi.
+
+### Where things are in this repo
+
+| Path | What it is |
+|---|---|
+| `marvelmind_fusion/` | **Deployed ROS 2 package** (`ament_python`) — the code built into `~/kobuki_ws` on the Pi: `fusion_node`, `goto_goal`, `goto_goal_obstacle`, `perimeter`, `calibrate_yaw`. Treat this as the source of truth for the running stack. |
+| `scripts/` | Standalone Python tools, plus **earlier / alternate** versions of some nodes (`fusion_node.py` = Aug IMU version, `fusion_node_paired.py` = paired-beacon heading, no IMU). Not part of the colcon package. |
+| `diagnostics/` | One-off IMU/serial debugging scripts (MIP scan, gyro test, yaw logging). |
+| `nav2_config/` | Nav2 launch file, params, and the static map (`map.pgm` / `map.yaml`). |
+| `config/` | MicroStrain driver params (`gq4_params.yml`) and the saved yaw calibration (`yaw_offset.json`, reference copy — see [§13](#13-phase-10--yaw-calibration)). |
+| `kobuki_launch.py` | Custom Kobuki launch file (TF publishing off, `/odom` remapped). |
+
 ---
 
 ## Table of Contents
@@ -1253,6 +1267,7 @@ This looks like a broken ROS install but is a name collision. Also avoid `contex
 | `/hedgehog_pos` | `HedgePosition` | marvelmind_ros2 | 8 Hz, x/y in metres |
 | `/imu/data` | `sensor_msgs/Imu` | microstrain_yaw_node | 25 Hz, yaw quaternion |
 | `/marvelmind_odom` | `nav_msgs/Odometry` | fusion_node | Nav2's odom source |
+| `/beacons_pos_addressed` | `BeaconPositionAddressed` | marvelmind_ros2 | Beacon positions; used by `perimeter` for bounds |
 | `/sensors/imu_data` | `sensor_msgs/Imu` | Kobuki | Onboard IMU — superseded |
 | `/commands/reset_odometry` | `std_msgs/Empty` | manual | Resets Kobuki odom |
 
@@ -1264,45 +1279,56 @@ Other Kobuki topics: `/events/bumper`, `/events/cliff`, `/events/wheel_drop`,
 
 ## 16. File Inventory
 
+### In this repo (`GroundRobots/turtlebot-navigation/`)
+
 ```
+marvelmind_fusion/                    # ROS 2 package, built in ~/kobuki_ws
+├── package.xml  setup.py  resource/
+└── marvelmind_fusion/
+    ├── fusion_node.py                # /hedgehog_pos + /imu/data -> /marvelmind_odom + TF
+    ├── goto_goal.py                  # drive to (x, y): turn-then-drive controller
+    ├── goto_goal_baseline.py         # byte-identical copy of goto_goal.py (kept as a baseline)
+    ├── goto_goal_obstacle.py         # waypoint nav with bounding-box detours
+    ├── perimeter.py                  # perimeter run bounded by beacon positions
+    └── calibrate_yaw.py              # writes yaw_offset.json from IMU yaw
+scripts/
+├── microstrain_yaw_node.py           # MIP parser -> /imu/data (uses /dev/imu)
+├── fusion_node.py                    # earlier IMU fusion version (Aug)
+├── fusion_node_paired.py             # paired-beacon heading, no IMU (Sep)
+├── goto_goal.py                      # earlier paired-beacon goto with map bounds (Sep)
+├── calibrate_yaw.py  wasd.py  square_loop.py
+diagnostics/                          # mip_scan, mip_gyro_test, mip_yaw_test, log_yaw
+nav2_config/                          # nav2_launch.py, nav2_params.yaml, map.pgm, map.yaml
+config/                               # gq4_params.yml, yaw_offset.json
+kobuki_launch.py
+```
+
+`setup.py` registers four console entry points: `fusion_node`, `goto_goal`, `perimeter`,
+`calibrate_yaw`. `goto_goal_obstacle.py` and `goto_goal_baseline.py` are **not**
+registered — run them with `python3` (see [§17](#17-startup-sequence)).
+
+### On the Pi (`bolzpi2`)
+
+```
+~/UAS_BOLZ/                           # this git repo (clone)
 ~/kobuki_ws/
-├── kobuki_launch.py                  # custom: publish_tf off, /odom remapped
+├── kobuki_launch.py
 ├── src/
-│   ├── kobuki_core/  kobuki_ros/  ecl_*/
-│   ├── kinect_ros2/                  # 2 header patches applied
-│   ├── freenect_stack/
-│   ├── marvelmind_ros2_upstream/
-│   ├── marvelmind_ros2_msgs_upstream/
+│   ├── kobuki_core/  kobuki_ros/  ecl_*/  kinect_ros2/  navigation2/
+│   ├── marvelmind_ros2_upstream/  marvelmind_ros2_msgs_upstream/
 │   ├── microstrain_inertial/         # builds; driver does not connect
-│   └── marvelmind_fusion/
-│       ├── marvelmind_fusion/
-│       │   ├── fusion_node.py
-│       │   ├── goto_goal.py
-│       │   ├── perimeter.py
-│       │   └── calibrate_yaw.py
-│       ├── package.xml
-│       └── setup.py
-├── build/  install/  log/
-
-~/nav2_config/
-├── nav2_params.yaml
-├── nav2_launch.py
-├── map.pgm
-└── map.yaml
-
-~/
-├── microstrain_yaw_node.py           # MIP parser -> /imu/data
-├── mip_yaw_test.py                   # diagnostic: print yaw
-├── mip_gyro_test.py                  # diagnostic: print gyro
-├── mip_scan.py                       # diagnostic: descriptor inventory
-├── log_yaw.py                        # logs /imu/data to /tmp/yaw_log.txt
-├── wasd.py                           # WASD teleop
-├── wasd_imu.py                       # WASD teleop + IMU logging
-├── square_loop.py                    # 4-waypoint Nav2 test
-├── kinect_stream.py                  # Flask MJPEG server
-├── yaw_offset.json                   # calibration output
-└── microstrain_config/gq4_params.yml
+│   └── marvelmind_fusion/            # copy of marvelmind_fusion/ above
+└── build/  install/  log/            # not tracked
+~/nav2_config/                        # copy of nav2_config/ above
+~/microstrain_config/gq4_params.yml
+~/microstrain_yaw_node.py             # copy of scripts/microstrain_yaw_node.py
+~/yaw_offset.json                     # live calibration, read by fusion_node
+~/ros_env/                            # Python venv, not tracked
 ```
+
+The Pi copies are not symlinked to the repo. After editing code on the Pi, copy it
+back into the repo before committing (and `colcon build` the package if you changed
+`marvelmind_fusion/`).
 
 ---
 
@@ -1372,6 +1398,28 @@ ros2 run topic_tools relay /cmd_vel /commands/velocity
 >
 > If paired-beacon heading (§10) replaces the IMU/fusion combo after the
 > spacing fix is validated, T3 and T4 drop out of this sequence entirely.
+
+### Drive to a Point
+
+With T1-T4 running (Marvelmind, Kobuki, IMU, fusion), no Nav2 needed:
+
+```bash
+source ~/kobuki_ws/install/setup.bash
+ros2 run marvelmind_fusion goto_goal 2.0 0.5            # x y in metres, map frame
+python3 ~/kobuki_ws/src/marvelmind_fusion/marvelmind_fusion/goto_goal_obstacle.py 3.0 1.0
+ros2 run marvelmind_fusion perimeter                     # needs /beacons_pos_addressed
+```
+
+`goto_goal` subscribes to `/marvelmind_odom` and publishes `/commands/velocity`
+directly. It turns in place until within 6 deg of the target bearing, then drives
+forward with a proportional heading correction (max 0.22 m/s linear, +/-0.4 rad/s
+angular), and stops within 0.15 m of the goal. `goto_goal_obstacle` adds
+detour waypoints around measured static obstacles using a buffered bounding-box
+check. `perimeter` derives bounds from the beacon positions (0.4 m margin) and
+includes stuck detection with an escape manoeuvre.
+
+> The older `scripts/goto_goal.py` (paired-beacon version) hard-codes map bounds
+> of x 0 to 5.5 m, y -2 to 2.1 m. The packaged `goto_goal` does not.
 
 ---
 
@@ -1491,6 +1539,9 @@ screen -S build
 - Nav2 launching, planning, and executing goals
 - Yaw calibration producing a valid map-frame offset
 - **MicroStrain IMU heading — validated, 0.002 deg/s drift, no settling lag**
+- udev symlinks (`/dev/imu`, `/dev/kobuki`, `/dev/hedgehog`); `microstrain_yaw_node.py` uses `/dev/imu`
+- Waypoint scripts written (`goto_goal`, `goto_goal_obstacle`, `perimeter`) and packaged in `marvelmind_fusion`
+- Repo and Pi in sync as of 2026-11-12
 
 ### Not Working / Incomplete
 
@@ -1499,7 +1550,10 @@ screen -S build
 | Marvelmind not physically set up in current rebuild | Blocks the full stack |
 | MicroStrain official ROS driver never connects | Bypassed with custom parser |
 | MicroStrain EKF (0x82) unusable indoors | By design — no GNSS; CF/gyro used instead |
-| Fusion node still reads yaw from `/kobuki_odom` | Needs rewrite to `/imu/data` |
+| ~~Fusion node still reads yaw from `/kobuki_odom`~~ | **Done** — the deployed `fusion_node` subscribes to `/imu/data` and applies `yaw_offset.json` (§11) |
+| Two code lines coexist: IMU-fusion (package) and paired-beacon heading (`scripts/fusion_node_paired.py`) | Paired-beacon path still pending the spacing fix below; package is what runs on the robot |
+| `goto_goal_obstacle.py` / `goto_goal_baseline.py` not registered as entry points | Run with `python3`; add to `setup.py` if they become routine |
+| `yaw_offset.json` path and `/home/uas/...` paths are hard-coded in `fusion_node.py` / `calibrate_yaw.py` | Fine on `bolzpi2`; parameterise before reusing on another Pi |
 | Kinect MJPEG stream times out | Deprioritized |
 | ~~udev rules not written~~ | **Done 2026-09-24** — see §3, `/etc/udev/rules.d/99-robot.rules` |
 | Robot has left map bounds during navigation | Mitigated by a larger map; not fully solved |
@@ -1517,8 +1571,8 @@ few degrees at most.
 
 ## 20. Next Steps
 
-1. **Rewrite `fusion_node.py`** to subscribe to `/imu/data` instead of `/kobuki_odom`.
-   Remove the `YAW_OFFSET` hardcode; the MicroStrain does not need it.
+1. ~~**Rewrite `fusion_node.py`** to subscribe to `/imu/data`.~~ **Done** — see
+   `marvelmind_fusion/marvelmind_fusion/fusion_node.py`. Original plan kept below for reference.
 
    ```python
    from sensor_msgs.msg import Imu
@@ -1534,7 +1588,7 @@ few degrees at most.
 2. **Stand Marvelmind back up** — place beacons, freeze the map, verify 8 Hz on
    `/hedgehog_pos`.
 
-3. **Write udev rules** before running three serial devices together.
+3. ~~**Write udev rules**~~ **Done 2026-09-24** (§3).
 
 4. **Re-run `calibrate_yaw`** with the MicroStrain in the loop.
 
@@ -1557,7 +1611,12 @@ few degrees at most.
     in the startup sequence — paired beacons would then supply x, y, and yaw
     from a single topic.
 
-11. **Investigate the intermittent Kobuki USB disconnect** (`error -71`) under
+11. **Repo hygiene:** decide which of `scripts/fusion_node.py`, `scripts/goto_goal.py`
+    and `marvelmind_fusion/` versions stay; retire duplicates once the paired-beacon
+    path is settled. Consider symlinking `~/kobuki_ws/src/marvelmind_fusion` to the repo
+    copy so Pi edits cannot drift from GitHub again.
+
+12. **Investigate the intermittent Kobuki USB disconnect** (`error -71`) under
     load with the Marvelmind modem on the same bus — check `lsusb -t` for
     shared-hub topology and consider moving Kobuki to a Pi root port if it
     recurs.

@@ -348,6 +348,10 @@ The compressed image is typically 2-4 GB for an 8 GB card (depending on how full
 
 ---
 
+## Contact
+
+For questions about this project, reach out to **Dhruv Chavan** — [chavan.36@osu.edu](mailto:chavan.36@osu.edu)
+
 ## License
 
 This project is developed for academic research at the BOLZ Lab.

@@ -8,6 +8,7 @@ Two platforms share a common Marvelmind indoor positioning system:
 |---|---|---|
 | [GroundRobots](./GroundRobots/turtlebot-navigation/) | TurtleBot2 + Pi 5 + ROS 2 Jazzy + Marvelmind + MicroStrain IMU | Active |
 | [CrowDrone](./CrowDrone/) | 10.5" quadcopter + Pixhawk 6C + ArduPilot + Marvelmind NMEA | Active |
+| [MessengerDrone](./MessengerDrone/) | Messenger drone platform | New |
 
 ## Demo
 
@@ -33,6 +34,9 @@ UAS_BOLZ/
 │   ├── test_arming.py                  # Arming sequence test
 │   ├── requirements.txt                # Python dependencies
 │   └── DRONE_INTEGRATION.md           # Marvelmind/Pixhawk wiring and params
+│
+├── MessengerDrone/                     # Messenger drone platform (new)
+│   └── README.md
 │
 ├── GroundRobots/turtlebot-navigation/  # Ground robot platform (ROS 2)
 │   ├── marvelmind_fusion/              # Deployed ROS 2 package (ament_python)
@@ -101,6 +105,7 @@ pip install -r GroundRobots/turtlebot-navigation/requirements.txt
 |---|---|---|---|
 | Drone Pi | `bolzpi` | `pi` | `ssh pi@bolzpi.local` |
 | Ground robot Pi | `bolzpi2` | `uas` | `ssh uas@bolzpi2.local` |
+| Messenger drone Pi | `messenger` | `messengerpi` | `ssh messengerpi@messenger.local` |
 
 ---
 

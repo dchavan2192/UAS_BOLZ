@@ -11,7 +11,13 @@ Two platforms share a common Marvelmind indoor positioning system:
 
 ## Demo
 
-https://github.com/dchavan2192/UAS_BOLZ/raw/master/media/autonomous_indoor_robot_demo.mp4
+| | |
+|---|---|
+| ![Setup](./media/setup_terminal_and_robot.jpg) | ![Marvelmind Dashboard](./media/marvelmind_dashboard_and_navigation.jpg) |
+| ROS 2 terminal output streaming while the TurtleBot navigates the lab | Marvelmind dashboard showing beacon positions (green) and hedgehog tracking (blue) |
+
+![Autonomous Navigation](./media/autonomous_navigation_in_progress.jpg)
+*TurtleBot2 autonomously navigating the Aerospace Learning Laboratory using Marvelmind indoor positioning*
 
 ---
 

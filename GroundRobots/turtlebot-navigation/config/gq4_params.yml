@@ -1,0 +1,24 @@
+/**:
+  ros__parameters:
+    port: "/dev/ttyACM0"
+    baudrate: 115200
+    
+    # Frame IDs
+    frame_id: "imu_link"
+    map_frame_id: "map"
+    
+    # Publish the raw AHRS IMU data - this is what we want for yaw
+    publish_imu: True
+    imu_data_rate: 50
+    
+    # GNSS off - we're indoors
+    publish_gnss1: False
+    publish_gnss2: False
+    
+    # Filter/EKF output
+    publish_filter: True
+    filter_data_rate: 50
+    
+    # Don't let the driver try to use GPS for heading
+    filter_auto_init: True
+    filter_reset_after_config: True

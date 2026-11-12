@@ -276,7 +276,9 @@ The hedgehog can only output one protocol at a time (NMEA or Marvelmind binary).
 
 ## Pi SD Card Backups
 
-Full disk images of the Pi SD cards are stored outside this repo (they're too large for GitHub). If you need one, ask the team lead.
+Full disk images of the Pi SD cards are stored in **Microsoft Teams** (too large for GitHub):
+
+> **UAS BOLZ** team -> **UAS-BUILD** channel -> **Big Drone** folder
 
 Backup images are byte-for-byte copies of the entire SD card — both the boot partition and the Linux root filesystem. They contain the full OS, all installed packages, ROS 2, the workspace, config files, and everything needed to get a Pi running identically.
 

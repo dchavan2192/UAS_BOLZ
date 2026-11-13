@@ -5,10 +5,10 @@ We are an undergraduate research team at **The Ohio State University** working i
 Our work spans hardware integration, embedded systems, ROS 2 robotics, flight controller programming, and indoor positioning — giving students hands-on experience across the full autonomy stack.
 
 <p align="center">
-  <img src="./media/autonomous_navigation_in_progress.jpg" alt="TurtleBot2 navigating autonomously in the Aerospace Learning Laboratory" width="700">
+  <img src="./media/crowdrone_flight.jpg" alt="CrowDrone quadcopter in flight" width="700">
 </p>
 
-<p align="center"><i>TurtleBot2 autonomously navigating the Aerospace Learning Laboratory using Marvelmind indoor positioning</i></p>
+<p align="center"><i>CrowDrone quadcopter during an indoor hover test in the BOLZ Lab</i></p>
 
 ---
 
@@ -21,11 +21,22 @@ Our work spans hardware integration, embedded systems, ROS 2 robotics, flight co
 | [MessengerDrone](./MessengerDrone/) | Messenger drone platform | New |
 
 <p align="center">
-  <img src="./media/setup_terminal_and_robot.jpg" alt="ROS 2 terminal and robot in the lab" width="420">
-  <img src="./media/marvelmind_dashboard_and_navigation.jpg" alt="Marvelmind beacon dashboard" width="420">
+  <img src="./media/autonomous_navigation_in_progress.jpg" alt="TurtleBot2 autonomous navigation" width="420">
+  <img src="./media/drone_bench_gimbal.jpg" alt="Drone with gimbal camera on bench" width="420">
 </p>
 
-<p align="center"><i>Left: ROS 2 nodes streaming on the terminal while the robot runs. Right: Marvelmind dashboard tracking the robot (blue) among stationary beacons (green).</i></p>
+<p align="center"><i>Left: TurtleBot2 navigating autonomously using Marvelmind indoor positioning. Right: Drone platform with gimbal camera and GPS module.</i></p>
+
+---
+
+## The Lab
+
+<p align="center">
+  <img src="./media/lab_workstation.jpg" alt="BOLZ Lab workstation with DJI Matrice" width="420">
+  <img src="./media/pixhawk_wiring.jpg" alt="Pixhawk flight controller wiring" width="420">
+</p>
+
+<p align="center"><i>Left: Lab workstation with drone hardware and safety netting. Right: Pixhawk 6C flight controller wiring and motor integration.</i></p>
 
 ---
 
